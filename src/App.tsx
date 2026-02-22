@@ -17,19 +17,81 @@ export default function App() {
   const [lastAction, setLastAction] = useState<string | null>(null);
   const [isShaking, setIsShaking] = useState(false);
 
+  const playRetroSound = (type: 'hit' | 'victory') => {
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContextClass) return;
+    
+    const ctx = new AudioContextClass();
+    
+    if (type === 'hit') {
+      // Retro Hit/Punch Sound
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(150, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(40, ctx.currentTime + 0.1);
+      
+      gain.gain.setValueAtTime(0.3, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
+      
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      
+      osc.start();
+      osc.stop(ctx.currentTime + 0.1);
+
+      // Add a bit of noise for the "impact"
+      const bufferSize = ctx.sampleRate * 0.05;
+      const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = Math.random() * 2 - 1;
+      }
+      
+      const noise = ctx.createBufferSource();
+      noise.buffer = buffer;
+      const noiseGain = ctx.createGain();
+      noiseGain.gain.setValueAtTime(0.2, ctx.currentTime);
+      noiseGain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.05);
+      
+      noise.connect(noiseGain);
+      noiseGain.connect(ctx.destination);
+      noise.start();
+    } else if (type === 'victory') {
+      // Retro Victory Fanfare (Arpeggio)
+      const notes = [261.63, 329.63, 392.00, 523.25]; // C4, E4, G4, C5
+      notes.forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq, ctx.currentTime + i * 0.1);
+        gain.gain.setValueAtTime(0.2, ctx.currentTime + i * 0.1);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + i * 0.1 + 0.3);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(ctx.currentTime + i * 0.1);
+        osc.stop(ctx.currentTime + i * 0.1 + 0.3);
+      });
+    }
+  };
+
   const triggerDopamine = (type: GoalType) => {
     const isPost = type === 'posts';
     const state = isPost ? posts : dms;
     const setter = isPost ? setPosts : setDms;
 
-    if (state.current >= state.target) {
-      // Goal already reached, but still allow incrementing for "extra" dopamine
-    }
-
     setter(prev => ({ ...prev, current: prev.current + 1 }));
     setLastAction(type);
     setIsShaking(true);
     setTimeout(() => setIsShaking(false), 300);
+
+    // Play Retro Sound
+    if (state.current + 1 === state.target) {
+      playRetroSound('victory');
+    } else {
+      playRetroSound('hit');
+    }
 
     // Confetti explosion
     confetti({
